@@ -544,231 +544,229 @@ const fileToBase64 = (file: File): Promise<string> => {
                 </div>
 
                 {/* Update Form */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="capacity" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                        <Target className="w-4 h-4 text-blue-600" />
-                        Upcoming Project Capacity
-                      </Label>
-                      <Input
-                        id="capacity"
-                        placeholder="e.g., 800 MW"
-                        value={updateData.upcomingProjectCapacity}
-                        onChange={(e) =>
-                          setUpdateData((prev) => ({
-                            ...prev,
-                            upcomingProjectCapacity: e.target.value,
-                          }))
-                        }
-                        className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
-                      />
-                    </div>
-
-                   <div className="space-y-2">
-  <Label htmlFor="geotag" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-    <Navigation className="w-4 h-4 text-emerald-600" />
-    Geo Tag Location
-  </Label>
-  <div className="flex gap-2">
-    <Input
-      id="geotag"
-      placeholder="https://www.google.com/maps?q=19.0760,72.8777"
-      value={updateData.geoTagLocation}
-      onChange={(e) =>
-        setUpdateData((prev) => ({
-          ...prev,
-          geoTagLocation: e.target.value,
-        }))
-      }
-      className="border-slate-300 focus:border-emerald-500 focus:ring-emerald-500"
-      readOnly={isGettingLocation}
-    />
-    <Button
-      type="button"
-      onClick={getUserLocation}
-      disabled={isGettingLocation}
-      variant="outline"
-      className="whitespace-nowrap border-emerald-300 hover:bg-emerald-50 hover:border-emerald-400"
-    >
-      {isGettingLocation ? (
-        <>
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600 mr-2"></div>
-          Getting...
-        </>
-      ) : (
-        <>
-          <Navigation className="w-4 h-4 mr-2" />
-          Get Location
-        </>
-      )}
-    </Button>
-  </div>
-  <p className="text-xs text-slate-500">
-    Click "Get Location" to automatically generate Google Maps link
-  </p>
-  
-  {/* Show clickable link if it's a valid URL */}
-  {updateData.geoTagLocation && updateData.geoTagLocation.startsWith('http') && (
-    <div className="mt-2">
-      <a 
-        href={updateData.geoTagLocation} 
-        target="_blank" 
-        rel="noopener noreferrer"
-        className="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1"
-      >
-        <MapPin className="w-3 h-3" />
-        Open in Google Maps
-      </a>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+  <div className="space-y-4">
+    <div className="space-y-2">
+      <Label htmlFor="capacity" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <Target className="w-4 h-4 text-blue-600" />
+        Upcoming Project Capacity
+      </Label>
+      <Input
+        id="capacity"
+        placeholder="e.g., 800 MW"
+        value={updateData.upcomingProjectCapacity}
+        onChange={(e) =>
+          setUpdateData((prev) => ({
+            ...prev,
+            upcomingProjectCapacity: e.target.value,
+          }))
+        }
+        className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+      />
     </div>
-  )}
-</div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="refractory" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                        <Package className="w-4 h-4 text-blue-600" />
-                        Current Refractory
-                      </Label>
-                      <Input
-                        id="refractory"
-                        placeholder="e.g., High Alumina Bricks"
-                        value={updateData.currentRefractory}
-                        onChange={(e) =>
-                          setUpdateData((prev) => ({
-                            ...prev,
-                            currentRefractory: e.target.value,
-                          }))
-                        }
-                        className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
-                      />
-                    </div>
+    <div className="space-y-2">
+      <Label htmlFor="geotag" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <Navigation className="w-4 h-4 text-emerald-600" />
+        Geo Tag Location
+      </Label>
+      <div className="flex gap-2">
+        <Input
+          id="geotag"
+          placeholder="https://www.google.com/maps?q=19.0760,72.8777"
+          value={updateData.geoTagLocation}
+          onChange={(e) =>
+            setUpdateData((prev) => ({
+              ...prev,
+              geoTagLocation: e.target.value,
+            }))
+          }
+          className="border-slate-300 focus:border-emerald-500 focus:ring-emerald-500"
+          readOnly={isGettingLocation}
+        />
+        <Button
+          type="button"
+          onClick={getUserLocation}
+          disabled={isGettingLocation}
+          variant="outline"
+          className="whitespace-nowrap border-emerald-300 hover:bg-emerald-50 hover:border-emerald-400"
+        >
+          {isGettingLocation ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600 mr-2"></div>
+              Getting...
+            </>
+          ) : (
+            <>
+              <Navigation className="w-4 h-4 mr-2" />
+              Get Location
+            </>
+          )}
+        </Button>
+      </div>
+      <p className="text-xs text-slate-500">
+        Click "Get Location" to automatically generate Google Maps link
+      </p>
+      
+      {updateData.geoTagLocation && updateData.geoTagLocation.startsWith('http') && (
+        <div className="mt-2">
+          <a 
+            href={updateData.geoTagLocation} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1"
+          >
+            <MapPin className="w-3 h-3" />
+            Open in Google Maps
+          </a>
+        </div>
+      )}
+    </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="orderStatus" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                        <Package className="w-4 h-4 text-emerald-600" />
-                        Order Status
-                      </Label>
-                      <Select
-                        value={updateData.orderStatus}
-                        onValueChange={(value) =>
-                          setUpdateData((prev) => ({
-                            ...prev,
-                            orderStatus: value,
-                          }))
-                        }
-                      >
-                        <SelectTrigger className="border-slate-300 focus:border-emerald-500 focus:ring-emerald-500">
-                          <SelectValue placeholder="Select order status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Yes">Order Received</SelectItem>
-                          <SelectItem value="No">Order Not Received</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+    <div className="space-y-2">
+      <Label htmlFor="refractory" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <Package className="w-4 h-4 text-blue-600" />
+        Current Refractory
+      </Label>
+      <Input
+        id="refractory"
+        placeholder="e.g., High Alumina Bricks"
+        value={updateData.currentRefractory}
+        onChange={(e) =>
+          setUpdateData((prev) => ({
+            ...prev,
+            currentRefractory: e.target.value,
+          }))
+        }
+        className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+      />
+    </div>
 
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="rawMaterial" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                        <Package className="w-4 h-4 text-emerald-600" />
-                        Raw Material Feed
-                      </Label>
-                      <Input
-                        id="rawMaterial"
-                        placeholder="e.g., Coal, Limestone"
-                        value={updateData.rawMaterialFeed}
-                        onChange={(e) =>
-                          setUpdateData((prev) => ({
-                            ...prev,
-                            rawMaterialFeed: e.target.value,
-                          }))
-                        }
-                        className="border-slate-300 focus:border-emerald-500 focus:ring-emerald-500"
-                      />
-                    </div>
+    <div className="space-y-2">
+      <Label htmlFor="statusOfVisit" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <Package className="w-4 h-4 text-emerald-600" />
+        Status of Visit
+      </Label>
+      <Input
+        id="statusOfVisit"
+        placeholder="e.g., Completed, Rescheduled, Pending, etc."
+        value={updateData.orderStatus}
+        onChange={(e) =>
+          setUpdateData((prev) => ({
+            ...prev,
+            orderStatus: e.target.value,
+          }))
+        }
+        className="border-slate-300 focus:border-emerald-500 focus:ring-emerald-500"
+      />
+      <p className="text-xs text-slate-500">
+        Enter the status of this visit (Completed, Rescheduled, Cancelled, etc.)
+      </p>
+    </div>
+  </div> {/* ← THIS CLOSES THE FIRST COLUMN */}
 
-                    <div className="space-y-2">
-                      <Label htmlFor="remark" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-blue-600" />
-                        What Did The Customer Say
-                      </Label>
-                      <Textarea
-                        id="remark"
-                        placeholder="Add any additional notes or observations..."
-                        value={updateData.remark}
-                        onChange={(e) =>
-                          setUpdateData((prev) => ({
-                            ...prev,
-                            remark: e.target.value,
-                          }))
-                        }
-                        rows={3}
-                        className="border-slate-300 focus:border-blue-500 focus:ring-blue-500 resize-none"
-                      />
-                    </div>
+  <div className="space-y-4"> {/* ← THIS STARTS THE SECOND COLUMN */}
+    <div className="space-y-2">
+      <Label htmlFor="rawMaterial" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <Package className="w-4 h-4 text-emerald-600" />
+        Raw Material Feed
+      </Label>
+      <Input
+        id="rawMaterial"
+        placeholder="e.g., Coal, Limestone"
+        value={updateData.rawMaterialFeed}
+        onChange={(e) =>
+          setUpdateData((prev) => ({
+            ...prev,
+            rawMaterialFeed: e.target.value,
+          }))
+        }
+        className="border-slate-300 focus:border-emerald-500 focus:ring-emerald-500"
+      />
+    </div>
 
-                    {/* Image Upload Section */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                        <Image className="w-4 h-4 text-blue-600" />
-                        Upload Images
-                        <span className="text-xs text-slate-500 font-normal">(Max 5 images)</span>
-                      </Label>
-                      
-                      {/* File Input */}
-                      <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={handleImageUpload}
-                          className="hidden"
-                          id="image-upload"
-                        />
-                        <Label
-                          htmlFor="image-upload"
-                          className="cursor-pointer flex flex-col items-center gap-2"
-                        >
-                          <Upload className="w-8 h-8 text-slate-400" />
-                          <span className="text-sm text-slate-600">Click to upload images</span>
-                          <span className="text-xs text-slate-500">PNG, JPG, JPEG up to 5MB each</span>
-                        </Label>
-                      </div>
+    <div className="space-y-2">
+      <Label htmlFor="remark" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <FileText className="w-4 h-4 text-blue-600" />
+        What Did The Customer Say
+      </Label>
+      <Textarea
+        id="remark"
+        placeholder="Add any additional notes or observations..."
+        value={updateData.remark}
+        onChange={(e) =>
+          setUpdateData((prev) => ({
+            ...prev,
+            remark: e.target.value,
+          }))
+        }
+        rows={3}
+        className="border-slate-300 focus:border-blue-500 focus:ring-blue-500 resize-none"
+      />
+    </div>
 
-                      {/* Image Previews */}
-                      {imagePreviews.length > 0 && (
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-slate-700">
-                            Selected Images ({imagePreviews.length}/5)
-                          </Label>
-                          <div className="grid grid-cols-3 gap-2">
-                            {imagePreviews.map((preview, index) => (
-                              <div key={index} className="relative group">
-                                <img
-                                  src={preview}
-                                  alt={`Preview ${index + 1}`}
-                                  className="w-full h-20 object-cover rounded-lg border border-slate-200"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => removeImage(index)}
-                                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                                <div className="text-xs text-slate-500 truncate mt-1">
-                                  {uploadedImages[index]?.name}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+    {/* Image Upload Section */}
+    <div className="space-y-3">
+      <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <Image className="w-4 h-4 text-blue-600" />
+        Upload Images
+        <span className="text-xs text-slate-500 font-normal">(Max 5 images)</span>
+      </Label>
+      
+      {/* File Input */}
+      <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
+        <Input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleImageUpload}
+          className="hidden"
+          id="image-upload"
+        />
+        <Label
+          htmlFor="image-upload"
+          className="cursor-pointer flex flex-col items-center gap-2"
+        >
+          <Upload className="w-8 h-8 text-slate-400" />
+          <span className="text-sm text-slate-600">Click to upload images</span>
+          <span className="text-xs text-slate-500">PNG, JPG, JPEG up to 5MB each</span>
+        </Label>
+      </div>
+
+      {/* Image Previews */}
+      {imagePreviews.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-slate-700">
+            Selected Images ({imagePreviews.length}/5)
+          </Label>
+          <div className="grid grid-cols-3 gap-2">
+            {imagePreviews.map((preview, index) => (
+              <div key={index} className="relative group">
+                <img
+                  src={preview}
+                  alt={`Preview ${index + 1}`}
+                  className="w-full h-20 object-cover rounded-lg border border-slate-200"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeImage(index)}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+                <div className="text-xs text-slate-500 truncate mt-1">
+                  {uploadedImages[index]?.name}
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  </div> {/* ← THIS CLOSES THE SECOND COLUMN */}
+</div> 
 
+{/* ← THIS CLOSES THE GRID */}
                 {/* Action Buttons */}
                 <div className="flex gap-3 pt-6 border-t border-slate-200">
                   <Button

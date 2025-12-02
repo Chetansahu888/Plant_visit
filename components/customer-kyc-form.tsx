@@ -13,20 +13,25 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface CustomerKYCData {
-  customerName: string
-  address: string
-  cityLocation: string
-  purchaseName: string
-  creditLimit: string
-  purchaseNo: string
-  purchaseDetails: string
-  projectName: string
+  customerName: string;
+  address: string;
+  cityLocation: string;
+  purchaseName: string;
+  creditLimit: string;
+  purchaseNo: string;
+  purchaseDetails: string;
+  projectName: string;
+  entryNumber: number;
+  versionNumber?: number; // Track which version this is
 }
 
 interface KYCSubmission extends CustomerKYCData {
   timestamp: string
   customerId: string
   editHistory?: EditRecord[]
+  allVersions?: {
+    [key: string]: string[] // Store all versions of each field
+  }
 }
 
 interface EditRecord {
@@ -39,19 +44,23 @@ interface FieldChange {
   field: string
   oldValue: string
   newValue: string
+  column?: string // Which column it was saved to
+  version?: number // Version number
 }
 
 export function CustomerKYCForm() {
-  const [formData, setFormData] = useState<CustomerKYCData>({
-    customerName: "",
-    address: "",
-    cityLocation: "",
-    purchaseName: "",
-    creditLimit: "",
-    purchaseNo: "",
-    purchaseDetails: "",
-    projectName: ""
-  })
+const [formData, setFormData] = useState<CustomerKYCData>({
+  customerName: "",
+  address: "",
+  cityLocation: "",
+  purchaseName: "",
+  creditLimit: "",
+  purchaseNo: "",
+  purchaseDetails: "",
+  projectName: "",
+  entryNumber: 1
+})
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -110,6 +119,7 @@ const parseSheetDate = (dateString: string): string => {
   // Fallback to current date
   return new Date().toISOString();
 }
+// Update fetchSubmissionHistory to include numbered columns:
 const fetchSubmissionHistory = async () => {
   setLoadingHistory(true)
   try {
@@ -119,20 +129,102 @@ const fetchSubmissionHistory = async () => {
       console.log("KYC Data Response:", result)
       
       if (result.success && result.data) {
-        const historyData = result.data.map((row: any, index: number) => ({
-  customerId: row["Customer ID"] || `CUST-${index + 1}`,
-  timestamp: parseSheetDate(row["Timestamp"]),
-  customerName: row["Customer Name"] || "",
-  address: row["Address"] || "",
-  cityLocation: row["City/Location"] || "",
-  purchaseName: row["Purchase Name"] || "",
-  creditLimit: row["Credit Limit"] || "",
-  purchaseNo: row["Purchase No."] || "",
-  purchaseDetails: row["Purchase Details"] || "",
-  projectName: row["Project Name"] || "",
-  editHistory: row["Edit History"] ? JSON.parse(row["Edit History"]) : []
-}))
-        setSubmissions(historyData)
+        const processedSubmissions: KYCSubmission[] = []
+        
+        result.data.forEach((row: any) => {
+          const customerId = row["Customer ID"]
+          
+          if (!customerId || customerId === "") return // Skip empty rows
+          
+          // Get LATEST version of each field by checking columns 1-5
+          const getLatestValue = (field: string): string => {
+            // Check columns 5 to 1 (reverse to get latest)
+            for (let i = 5; i >= 1; i--) {
+              const columnName = i === 1 ? field : `${field}${i}`
+              if (row[columnName] && row[columnName].toString().trim() !== "") {
+                return row[columnName].toString()
+              }
+            }
+            // Fallback to original column
+            return row[field] ? row[field].toString() : ""
+          }
+          
+          // Get ALL versions for edit history display
+          const getAllVersions = (field: string): string[] => {
+            const versions: string[] = []
+            // Add original version
+            if (row[field]) versions.push(row[field].toString())
+            // Add numbered versions
+            for (let i = 1; i <= 5; i++) {
+              const columnName = `${field}${i}`
+              if (row[columnName] && row[columnName].toString().trim() !== "") {
+                versions.push(row[columnName].toString())
+              }
+            }
+            return versions
+          }
+          
+          // Parse edit history
+          let editHistory: EditRecord[] = []
+          try {
+            const historyJson = row["Edit History"]
+            if (historyJson && historyJson !== "[]" && historyJson !== "") {
+              const parsed = JSON.parse(historyJson)
+              if (Array.isArray(parsed)) {
+                editHistory = parsed.map((entry: any) => ({
+                  timestamp: entry.timestamp || "",
+                  editedBy: entry.user || entry.editedBy || "Unknown",
+                  changes: Object.keys(entry.changes || {}).map(fieldKey => {
+                    const change = entry.changes[fieldKey]
+                    return {
+                      field: fieldKey,
+                      oldValue: change.from || "",
+                      newValue: change.to || "",
+                      column: change.column || "",
+                      version: change.version || 1
+                    }
+                  })
+                }))
+              }
+            }
+          } catch (e) {
+            console.error("Error parsing edit history:", e)
+          }
+          
+          const submission: KYCSubmission = {
+            customerId: customerId,
+            timestamp: parseSheetDate(row["Timestamp"]),
+            customerName: getLatestValue("Customer Name"),
+            address: getLatestValue("Address"),
+            cityLocation: getLatestValue("City/Location"),
+            purchaseName: getLatestValue("Purchase Name"),
+            creditLimit: getLatestValue("Credit Limit"),
+            purchaseNo: getLatestValue("Purchase No."),
+            purchaseDetails: getLatestValue("Purchase Details"),
+            projectName: getLatestValue("Project Name"),
+            entryNumber: Number(row["Entry Number"]) || 1,
+            editHistory: editHistory,
+            allVersions: {
+              customerName: getAllVersions("Customer Name"),
+              address: getAllVersions("Address"),
+              cityLocation: getAllVersions("City/Location"),
+              purchaseName: getAllVersions("Purchase Name"),
+              creditLimit: getAllVersions("Credit Limit"),
+              purchaseNo: getAllVersions("Purchase No."),
+              purchaseDetails: getAllVersions("Purchase Details"),
+              projectName: getAllVersions("Project Name")
+            }
+          }
+          
+          processedSubmissions.push(submission)
+        })
+        
+        // Sort by timestamp (newest first)
+        processedSubmissions.sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        )
+        
+        setSubmissions(processedSubmissions)
       } else {
         throw new Error(result.error || "No KYC data found")
       }
@@ -148,6 +240,23 @@ const fetchSubmissionHistory = async () => {
   }
 }
 
+// Helper function to get all versions of a field
+const getFieldVersions = (row: any, fieldName: string, maxVersions: number) => {
+  const versions: string[] = [];
+  
+  // Add original version
+  if (row[fieldName]) versions.push(row[fieldName]);
+  
+  // Add numbered versions
+  for (let i = 1; i <= maxVersions; i++) {
+    const numberedField = fieldName + i;
+    if (row[numberedField]) versions.push(row[numberedField]);
+  }
+  
+  return versions;
+}
+
+
   useEffect(() => {
     if (activeTab === "history") {
       fetchSubmissionHistory()
@@ -160,21 +269,30 @@ const fetchSubmissionHistory = async () => {
   setError(null)
 
   try {
-    // Create URL parameters for GET request (bypasses CORS)
+    // Create URL parameters for GET request
     const params = new URLSearchParams({
       action: 'submitKYC',
-      customerName: formData.customerName,
-      address: formData.address,
-      cityLocation: formData.cityLocation,
-      purchaseName: formData.purchaseName,
-      creditLimit: formData.creditLimit,
-      purchaseNo: formData.purchaseNo,
-      purchaseDetails: formData.purchaseDetails,
-      projectName: formData.projectName,
       timestamp: new Date().toISOString()
     })
 
+    // Check if customer name is not empty
+    if (!formData.customerName.trim()) {
+      throw new Error("Customer Name is required")
+    }
+
+    // Add single entry to parameters (no need for forEach loop)
+    params.append('customerName', formData.customerName)
+    params.append('address', formData.address)
+    params.append('cityLocation', formData.cityLocation)
+    params.append('purchaseName', formData.purchaseName)
+    params.append('creditLimit', formData.creditLimit)
+    params.append('purchaseNo', formData.purchaseNo)
+    params.append('purchaseDetails', formData.purchaseDetails)
+    params.append('projectName', formData.projectName)
+    params.append('entryNumber', formData.entryNumber.toString())
+
     const url = `${SHEET_API_URL}?${params.toString()}`
+    console.log("Submitting URL:", url) // Debug log
     
     const response = await fetch(url, {
       method: 'GET',
@@ -186,6 +304,7 @@ const fetchSubmissionHistory = async () => {
 
     if (result.success) {
       setIsSubmitted(true)
+      // Reset form
       setFormData({
         customerName: "",
         address: "",
@@ -194,7 +313,8 @@ const fetchSubmissionHistory = async () => {
         creditLimit: "",
         purchaseNo: "",
         purchaseDetails: "",
-        projectName: ""
+        projectName: "",
+        entryNumber: 1
       })
       if (activeTab === "history") {
         fetchSubmissionHistory()
@@ -214,91 +334,160 @@ const handleEditSubmit = async () => {
   if (!editingSubmission || !editFormData) return
 
   setIsEditing(true)
+  setError(null)
+  
   try {
-    // Find changes
-    const changes: FieldChange[] = []
-    Object.keys(editFormData).forEach(key => {
-      const field = key as keyof CustomerKYCData
-      if (editFormData[field] !== editingSubmission[field]) {
-        changes.push({
-          field,
-          oldValue: editingSubmission[field],
-          newValue: editFormData[field]
-        })
-      }
-    })
-
-    if (changes.length === 0) {
-      closeEditDialog()
-      return
+    // Find which version number to use for this edit
+    let nextVersionNumber = 1
+    
+    // Check existing versions to determine next version number
+    if (editingSubmission.allVersions) {
+      // Check how many versions exist for customerName (represents total edits)
+      const customerNameVersions = editingSubmission.allVersions.customerName || []
+      nextVersionNumber = Math.min(customerNameVersions.length + 1, 5)
     }
-
-    // Create edit record
-    const editRecord: EditRecord = {
-      timestamp: new Date().toISOString(),
-      editedBy: "Current User",
-      changes
-    }
-
-    // Update submission locally
-    const updatedSubmission: KYCSubmission = {
-      ...editingSubmission,
-      ...editFormData,
-      editHistory: [...(editingSubmission.editHistory || []), editRecord]
-    }
-
-    // Update in state
-    setSubmissions(prev => 
-      prev.map(sub => sub.customerId === editingSubmission.customerId ? updatedSubmission : sub)
-    )
-
-    // Send update via GET request
+    
+    // Prepare update data
     const params = new URLSearchParams({
       action: 'updateKYC',
       customerId: editingSubmission.customerId,
-      customerName: editFormData.customerName,
-      address: editFormData.address,
-      cityLocation: editFormData.cityLocation,
-      purchaseName: editFormData.purchaseName,
-      creditLimit: editFormData.creditLimit,
-      purchaseNo: editFormData.purchaseNo,
-      purchaseDetails: editFormData.purchaseDetails,
-      projectName: editFormData.projectName,
-      editHistory: JSON.stringify(updatedSubmission.editHistory)
+      currentUser: "Current User"
     })
-
+    
+    // Fix 1: Define fieldMapping with all properties from CustomerKYCData
+    const fieldMapping: Record<keyof CustomerKYCData, string> = {
+      customerName: "customerName",
+      address: "address",
+      cityLocation: "cityLocation",
+      purchaseName: "purchaseName",
+      creditLimit: "creditLimit",
+      purchaseNo: "purchaseNo",
+      purchaseDetails: "purchaseDetails",
+      projectName: "projectName",
+      entryNumber: "entryNumber", // Add missing property
+      versionNumber: "versionNumber" // Add versionNumber if needed
+    }
+    
+    // Fix 2: Iterate through fieldMapping keys instead of editFormData keys
+    Object.keys(fieldMapping).forEach(fieldKey => {
+      const key = fieldKey as keyof CustomerKYCData;
+      const value = editFormData[key];
+      
+      // Skip if value is undefined or (if string) empty after trim
+      if (value === undefined || value === null) return;
+      
+      // For strings, check if it's empty after trimming
+      if (typeof value === "string" && value.trim() === "") {
+        return;
+      }
+      
+      // For numbers, you might want to send them anyway
+      // Or skip if 0: if (typeof value === "number" && value === 0) return;
+      
+      // Get the mapped parameter name
+      const paramName = fieldMapping[key];
+      
+      // Add version suffix for versions 2-5
+      const finalParamName = nextVersionNumber > 1 ? paramName + nextVersionNumber : paramName;
+      
+      // Convert value to string for URL params
+      params.append(finalParamName, String(value));
+    })
+    
+    console.log("Edit Params:", params.toString())
+    
     const url = `${SHEET_API_URL}?${params.toString()}`
+    
+    // Make the update request
     const response = await fetch(url, {
       method: 'GET',
       redirect: 'follow'
     })
-
-    const result = await response.json()
-    if (!result.success) {
-      throw new Error(result.error || "Failed to update KYC submission")
+    
+    // Try to get response text
+    const responseText = await response.text()
+    console.log("Edit Response:", responseText)
+    
+    // Parse response if it's JSON
+    let result
+    try {
+      result = JSON.parse(responseText)
+    } catch (e) {
+      console.log("Response is not JSON:", responseText)
+      // If response is not JSON, it might be HTML (error page)
+      if (responseText.includes("success") || responseText.includes("updated")) {
+        result = { success: true, message: "Update submitted" }
+      } else {
+        throw new Error("Invalid response from server")
+      }
     }
-
-    closeEditDialog()
+    
+    if (result.success) {
+      // Close dialog and refresh data
+      closeEditDialog()
+      
+      // Show success message
+      setError("✅ Update successful! Refreshing data...")
+      
+      // Refresh data after a short delay
+      setTimeout(() => {
+        fetchSubmissionHistory()
+      }, 1000)
+    } else {
+      throw new Error(result.error || "Update failed")
+    }
+    
   } catch (err: any) {
-    console.error("Error updating KYC submission:", err)
-    setError(err.message || "Failed to update submission. Please try again.")
+    console.error("Error updating KYC:", err)
+    setError(`❌ ${err.message || "Failed to update. Please try again."}`)
   } finally {
     setIsEditing(false)
   }
 }
-  const handleInputChange = (field: keyof CustomerKYCData, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }))
+// Add this function to fetch edit history for a specific customer
+const fetchEditHistoryForCustomer = async (customerId: string) => {
+  try {
+    const response = await fetch(
+      `${SHEET_API_URL}?action=getEditHistory&customerId=${encodeURIComponent(customerId)}`
+    );
+    
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success) {
+        // Transform the data to match your component's format
+        const transformedHistory = result.history.map((entry: any) => ({
+          timestamp: entry.timestamp,
+          editedBy: entry.user || entry.editedBy || "Unknown",
+          changes: Object.keys(entry.changes || {}).map(field => ({
+            field,
+            oldValue: entry.changes[field]?.from || "",
+            newValue: entry.changes[field]?.to || ""
+          }))
+        }));
+        
+        return transformedHistory;
+      }
+    }
+    return [];
+  } catch (error) {
+    console.error("Error fetching edit history:", error);
+    return [];
   }
+};
 
-  const handleEditInputChange = (field: keyof CustomerKYCData, value: string) => {
-    setEditFormData(prev => prev ? {
-      ...prev,
-      [field]: value
-    } : null)
-  }
+  const handleInputChange = (field: keyof CustomerKYCData, value: string | number) => {
+  setFormData(prev => ({
+    ...prev,
+    [field]: value
+  }))
+}
+
+  const handleEditInputChange = (field: keyof CustomerKYCData, value: string | number) => {
+  setEditFormData(prev => prev ? {
+    ...prev,
+    [field]: value
+  } : null)
+}
 
   const resetForm = () => {
     setIsSubmitted(false)
@@ -316,7 +505,9 @@ const handleEditSubmit = async () => {
       creditLimit: submission.creditLimit,
       purchaseNo: submission.purchaseNo,
       purchaseDetails: submission.purchaseDetails,
-      projectName: submission.projectName
+      projectName: submission.projectName,
+      entryNumber: submission.entryNumber || 1 // Add this line
+
     })
     setIsEditDialogOpen(true)
   }
@@ -328,83 +519,7 @@ const handleEditSubmit = async () => {
     setIsEditing(false)
   }
 
-  // const handleEditSubmit = async () => {
-  //   if (!editingSubmission || !editFormData) return
-
-  //   setIsEditing(true)
-  //   try {
-  //     // Find changes
-  //     const changes: FieldChange[] = []
-  //     Object.keys(editFormData).forEach(key => {
-  //       const field = key as keyof CustomerKYCData
-  //       if (editFormData[field] !== editingSubmission[field]) {
-  //         changes.push({
-  //           field,
-  //           oldValue: editingSubmission[field],
-  //           newValue: editFormData[field]
-  //         })
-  //       }
-  //     })
-
-  //     if (changes.length === 0) {
-  //       closeEditDialog()
-  //       return
-  //     }
-
-  //     // Create edit record
-  //     const editRecord: EditRecord = {
-  //       timestamp: new Date().toISOString(),
-  //       editedBy: "Current User", // In real app, get from auth context
-  //       changes
-  //     }
-
-  //     // Update submission locally
-  //     const updatedSubmission: KYCSubmission = {
-  //       ...editingSubmission,
-  //       ...editFormData,
-  //       editHistory: [...(editingSubmission.editHistory || []), editRecord]
-  //     }
-
-  //     // Update in state
-  //     setSubmissions(prev => 
-  //       prev.map(sub => sub.customerId === editingSubmission.customerId ? updatedSubmission : sub)
-  //     )
-
-  //     // Send to API
-  //     const response = await fetch(SHEET_API_URL, {
-  //       method: "POST",
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //       },
-  //       body: JSON.stringify({
-  //         action: "updateKYC",
-  //         customerId: editingSubmission.customerId,
-  //         customerName: editFormData.customerName,
-  //         address: editFormData.address,
-  //         cityLocation: editFormData.cityLocation,
-  //         purchaseName: editFormData.purchaseName,
-  //         creditLimit: editFormData.creditLimit,
-  //         purchaseNo: editFormData.purchaseNo,
-  //         purchaseDetails: editFormData.purchaseDetails,
-  //         projectName: editFormData.projectName,
-  //         editHistory: JSON.stringify(updatedSubmission.editHistory)
-  //       }),
-  //     })
-
-  //     const result = await response.json()
-  //     if (!result.success) {
-  //       throw new Error(result.error || "Failed to update KYC submission")
-  //     }
-
-  //     closeEditDialog()
-  //   } catch (err: any) {
-  //     console.error("Error updating KYC submission:", err)
-  //     setError(err.message || "Failed to update submission. Please try again.")
-  //   } finally {
-  //     setIsEditing(false)
-  //   }
-  // }
-
+  
   // Filter submissions based on search and project filter
   const filteredSubmissions = submissions.filter(submission => {
     const matchesSearch = 
@@ -433,7 +548,9 @@ const handleEditSubmit = async () => {
       creditLimit: "Credit Limit",
       purchaseNo: "Purchase No",
       purchaseDetails: "Purchase Details",
-      projectName: "Project Name"
+      projectName: "Project Name",
+      entryNumber: "entryNumber", // Add missing property
+
     }
     return fieldMap[field] || field
   }
@@ -686,7 +803,7 @@ const handleEditSubmit = async () => {
                       <Input
                         id="customerName"
                         placeholder="Enter customer full name"
-                        value={formData.customerName}
+                        value={(formData as any).customerName || ""}
                         onChange={(e) => handleInputChange("customerName", e.target.value)}
                         className="w-full border-slate-300 focus:border-blue-500"
                         required
@@ -703,7 +820,7 @@ const handleEditSubmit = async () => {
                       <Input
                         id="purchaseName"
                         placeholder="Enter purchase contact name"
-                        value={formData.purchaseName}
+                        value={(formData as any ).purchaseName || ""}
                         onChange={(e) => handleInputChange("purchaseName", e.target.value)}
                         className="w-full border-slate-300 focus:border-emerald-500"
                         required
@@ -720,7 +837,7 @@ const handleEditSubmit = async () => {
                       <Input
                         id="purchaseNo"
                         placeholder="Enter purchase contact number"
-                        value={formData.purchaseNo}
+                        value={(formData as any).purchaseNo || ""}
                         onChange={(e) => handleInputChange("purchaseNo", e.target.value)}
                         className="w-full border-slate-300 focus:border-blue-500"
                         required
@@ -737,7 +854,7 @@ const handleEditSubmit = async () => {
                       <Input
                         id="projectName"
                         placeholder="Enter project name"
-                        value={formData.projectName}
+                        value={(formData as any ).projectName || ""}
                         onChange={(e) => handleInputChange("projectName", e.target.value)}
                         className="w-full border-slate-300 focus:border-emerald-500"
                         required
@@ -754,7 +871,7 @@ const handleEditSubmit = async () => {
                       <Input
                         id="creditLimit"
                         placeholder="Enter credit limit amount"
-                        value={formData.creditLimit}
+                        value={(formData as any).creditLimit || ""}
                         onChange={(e) => handleInputChange("creditLimit", e.target.value)}
                         className="w-full border-slate-300 focus:border-blue-500"
                         required
@@ -771,7 +888,7 @@ const handleEditSubmit = async () => {
                       <Input
                         id="cityLocation"
                         placeholder="Enter city or location"
-                        value={formData.cityLocation}
+                        value={(formData as any ).cityLocation || ""}
                         onChange={(e) => handleInputChange("cityLocation", e.target.value)}
                         className="w-full border-slate-300 focus:border-blue-500"
                         required
@@ -788,7 +905,7 @@ const handleEditSubmit = async () => {
                       <Input
                         id="address"
                         placeholder="Enter complete address"
-                        value={formData.address}
+                        value={(formData as any).address || ""}
                         onChange={(e) => handleInputChange("address", e.target.value)}
                         className="w-full border-slate-300 focus:border-blue-500"
                         required
@@ -805,7 +922,7 @@ const handleEditSubmit = async () => {
                       <textarea
                         id="purchaseDetails"
                         placeholder="Enter detailed purchase information"
-                        value={formData.purchaseDetails}
+                        value={(formData as any ).purchaseDetails || ""}
                         onChange={(e) => handleInputChange("purchaseDetails", e.target.value)}
                         className="w-full min-h-[120px] p-3 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-vertical disabled:opacity-50"
                         required
@@ -960,7 +1077,7 @@ const handleEditSubmit = async () => {
                   <div className="space-y-4 max-h-[600px] overflow-y-auto">
                     {filteredSubmissions.map((submission) => (
                       <div
-                        key={submission.customerId}
+                   key={`${submission.customerId}-${submission.timestamp}-${Math.random()}`}
                         className="p-6 border border-slate-200 rounded-xl bg-gradient-to-r from-white to-slate-50 hover:shadow-md transition-all duration-200"
                       >
                         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
@@ -983,45 +1100,45 @@ const handleEditSubmit = async () => {
                                   </Badge>
                                 </div>
                                 <div className="flex gap-2 ml-4">
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => openEditDialog(submission)}
-                                          className="h-8 px-2 text-slate-600 hover:text-blue-600"
-                                        >
-                                          <Edit className="w-3 h-3" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Edit Submission</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                  
-                                  {getEditCount(submission) > 0 && (
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setViewEditHistory(submission)}
-                                            className="h-8 px-2 text-slate-600 hover:text-orange-600"
-                                          >
-                                            <Clock className="w-3 h-3" />
-                                            <span className="ml-1 text-xs">{getEditCount(submission)}</span>
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p>View Edit History ({getEditCount(submission)} edits)</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                  )}
-                                </div>
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => openEditDialog(submission)}
+          className="h-8 px-2 text-slate-600 hover:text-blue-600"
+        >
+          <Edit className="w-3 h-3" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>Edit this customer</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+  
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setViewEditHistory(submission)}
+          className="h-8 px-2 text-slate-600 hover:text-orange-600"
+        >
+          <Clock className="w-3 h-3" />
+          <span className="ml-1 text-xs">
+            {submission.editHistory?.length || submission.allVersions?.customerName.length || 1}
+          </span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>View Edit History ({submission.editHistory?.length || submission.allVersions?.customerName.length || 1} versions)</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+</div>
                               </div>
                             </div>
                             
@@ -1065,19 +1182,19 @@ const handleEditSubmit = async () => {
     }
   </span>
 </div>
-    {getEditCount(submission) > 0 && (
-      <div className="flex items-center gap-2">
-        <AlertCircle className="w-4 h-4 text-orange-500" />
-        <span className="font-medium text-slate-700">Last Edited:</span>
-        <span className="text-slate-600">
-          {new Date(submission.editHistory![submission.editHistory!.length - 1].timestamp).toLocaleDateString('en-IN', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          })}
-        </span>
-      </div>
-    )}
+   {submission.editHistory && submission.editHistory.length > 0 && (
+  <div className="flex items-center gap-2">
+    <AlertCircle className="w-4 h-4 text-orange-500" />
+    <span className="font-medium text-slate-700">Last Edited:</span>
+    <span className="text-slate-600">
+      {new Date(submission.editHistory[submission.editHistory.length - 1].timestamp).toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      })}
+    </span>
+  </div>
+)}
   </div>
 </div>
                             
@@ -1217,70 +1334,215 @@ const handleEditSubmit = async () => {
       </Dialog>
 
       {/* Edit History Dialog */}
-      <Dialog open={!!viewEditHistory} onOpenChange={(open) => !open && setViewEditHistory(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <History className="w-5 h-5 text-orange-600" />
-              Edit History - {viewEditHistory?.customerName}
-            </DialogTitle>
-            <DialogDescription>
-              Track all changes made to this submission
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 max-h-[400px] overflow-y-auto">
-            {viewEditHistory?.editHistory && viewEditHistory.editHistory.length > 0 ? (
-              viewEditHistory.editHistory.map((edit, index) => (
-                <div key={index} className="border border-slate-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-slate-500" />
-                      <span className="font-medium text-sm">{edit.editedBy}</span>
+      {/* Edit History Dialog */}
+{/* Edit History Dialog - Show detailed version history */}
+<Dialog open={!!viewEditHistory} onOpenChange={(open) => !open && setViewEditHistory(null)}>
+  <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+    <DialogHeader>
+      <DialogTitle className="flex items-center gap-2">
+        <History className="w-5 h-5 text-orange-600" />
+        Edit History - {viewEditHistory?.customerName}
+        <Badge variant="outline" className="ml-2">
+          {viewEditHistory?.editHistory?.length || 0} edits
+        </Badge>
+      </DialogTitle>
+      <DialogDescription>
+        All versions of this customer's data. Latest version is shown first.
+      </DialogDescription>
+    </DialogHeader>
+    
+    <div className="space-y-6">
+      {viewEditHistory?.allVersions ? (
+        <>
+          {/* Version Timeline */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border">
+            <h4 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Version Timeline
+            </h4>
+            <div className="flex items-center justify-between">
+              {[1, 2, 3, 4, 5].map((versionNum) => {
+                const hasVersion = viewEditHistory!.allVersions!.customerName.length >= versionNum
+                return (
+                  <div key={versionNum} className="flex flex-col items-center">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      hasVersion ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
+                    }`}>
+                      {versionNum}
                     </div>
-                    <Badge variant="outline" className="text-xs">
-                      {new Date(edit.timestamp).toLocaleDateString('en-IN', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </Badge>
+                    <span className="text-xs mt-1">
+                      {hasVersion ? `V${versionNum}` : 'Empty'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          
+          {/* Detailed Version Comparison */}
+          <div className="space-y-4">
+            <h4 className="font-semibold text-slate-800">All Versions (Latest to Oldest)</h4>
+            
+            {/* Show each version */}
+            {viewEditHistory.allVersions.customerName.map((_, index) => {
+              const versionNum = index + 1
+              const isLatest = index === 0
+              
+              return (
+                <div key={versionNum} className="border border-slate-200 rounded-lg overflow-hidden">
+                  <div className={`p-3 ${
+                    isLatest ? 'bg-emerald-50 border-b border-emerald-200' : 'bg-slate-50 border-b border-slate-200'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={isLatest ? "default" : "outline"} className={
+                          isLatest ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : ''
+                        }>
+                          Version {versionNum} {isLatest && '(Latest)'}
+                        </Badge>
+                        {viewEditHistory.editHistory && viewEditHistory.editHistory[index] && (
+                          <span className="text-sm text-slate-600">
+                            Edited: {new Date(viewEditHistory.editHistory[index].timestamp).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm font-medium text-slate-700">
+                        Saved in: {versionNum === 1 ? 'Original columns' : `Columns ${versionNum}`}
+                      </span>
+                    </div>
                   </div>
                   
-                  <div className="space-y-2">
-                    {edit.changes.map((change, changeIndex) => (
-                      <div key={changeIndex} className="flex items-start gap-3 p-2 bg-slate-50 rounded">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm text-slate-700">
-                            {getFieldDisplayName(change.field)}
+                  <div className="p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Field values for this version */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-slate-700">Customer Name:</span>
+                          <span className="text-slate-900">
+                            {viewEditHistory.allVersions?.customerName?.[index] || "(Not set)"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium text-slate-700">Address:</span>
+                          <span className="text-slate-900">
+                            {viewEditHistory.allVersions?.address?.[index] || "(Not set)"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium text-slate-700">City/Location:</span>
+                          <span className="text-slate-900">
+                            {viewEditHistory.allVersions?.cityLocation?.[index] || "(Not set)"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium text-slate-700">Purchase Name:</span>
+                          <span className="text-slate-900">
+                            {viewEditHistory.allVersions?.purchaseName?.[index] || "(Not set)"}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-slate-700">Credit Limit:</span>
+                          <span className="text-slate-900">
+                            {viewEditHistory.allVersions?.creditLimit?.[index] || "(Not set)"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium text-slate-700">Contact No:</span>
+                          <span className="text-slate-900">
+                            {viewEditHistory.allVersions?.purchaseNo?.[index] || "(Not set)"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium text-slate-700">Project:</span>
+                          <span className="text-slate-900">
+                            {viewEditHistory.allVersions?.projectName?.[index] || "(Not set)"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium text-slate-700">Details:</span>
+                          <span className="text-slate-900">
+                          {viewEditHistory.allVersions?.purchaseDetails?.[index] || "(Not set)"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          
+          {/* Edit History Timeline */}
+          {viewEditHistory.editHistory && viewEditHistory.editHistory.length > 0 && (
+            <div className="border-t pt-6">
+              <h4 className="font-semibold text-slate-800 mb-4">Edit Change Log</h4>
+              <div className="space-y-3">
+                {viewEditHistory.editHistory.map((edit, index) => (
+                  <div key={index} className="border-l-2 border-blue-500 pl-4 pb-4 relative">
+                    <div className="absolute -left-2 top-0 w-4 h-4 bg-blue-500 rounded-full"></div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-sm">{edit.editedBy}</span>
+                      <span className="text-xs text-slate-500">
+                        {new Date(edit.timestamp).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {edit.changes.map((change, changeIndex) => (
+                        <div key={changeIndex} className="text-sm bg-slate-50 p-2 rounded">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {getFieldDisplayName(change.field)}
+                            </Badge>
+                            {change.column && (
+                              <Badge variant="outline" className="text-xs bg-blue-50">
+                                {change.column}
+                              </Badge>
+                            )}
                           </div>
-                          <div className="grid grid-cols-2 gap-4 mt-1">
+                          <div className="grid grid-cols-2 gap-2 mt-1">
                             <div>
                               <div className="text-xs text-slate-500">From:</div>
-                              <div className="text-sm text-slate-700 line-through">{change.oldValue}</div>
+                              <div className="text-slate-700 line-through">{change.oldValue || "(empty)"}</div>
                             </div>
                             <div>
                               <div className="text-xs text-slate-500">To:</div>
-                              <div className="text-sm text-emerald-700 font-medium">{change.newValue}</div>
+                              <div className="text-emerald-700 font-medium">{change.newValue}</div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-slate-500">
-                <AlertCircle className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-                <p>No edit history found for this submission.</p>
+                ))}
               </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="text-center py-8 text-slate-500">
+          <AlertCircle className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+          <p>No version history available for this submission.</p>
+        </div>
+      )}
+    </div>
+  </DialogContent>
+</Dialog>
+
     </div>
   )
 }
